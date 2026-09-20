@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1020">
+<title>Fasmora Update Checker</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:radial-gradient(circle at 50% 0,#1c315d 0,#0b1020 42%,#070a12 100%);color:#f7f9ff;display:grid;place-items:center;padding:22px}.card{width:min(100%,520px);background:rgba(18,25,43,.78);border:1px solid rgba(255,255,255,.1);border-radius:28px;padding:30px;box-shadow:0 24px 80px rgba(0,0,0,.38);backdrop-filter:blur(18px)}.brand{font-weight:800;letter-spacing:.2px}.icon{width:78px;height:78px;border-radius:24px;margin:24px auto 18px;display:grid;place-items:center;background:linear-gradient(145deg,#5d8cff,#765cff);font-size:36px;box-shadow:0 12px 35px rgba(93,140,255,.3)}h1{text-align:center;font-size:28px;margin:0 0 8px}.sub{text-align:center;color:#aeb9d2;line-height:1.55;margin:0 0 24px}.status{padding:13px 15px;border-radius:15px;background:rgba(255,255,255,.06);color:#cbd4e7;font-size:14px}.meta{display:flex;justify-content:space-between;gap:12px;margin:18px 0;color:#aeb9d2;font-size:14px}.meta b{color:#fff}.news{margin:22px 0}.news h2{font-size:15px;margin:0 0 11px}.news ul{margin:0;padding-left:21px;color:#cbd4e7;line-height:1.8}.btn{display:block;width:100%;border:0;border-radius:16px;padding:15px 18px;text-align:center;text-decoration:none;font-weight:800;background:#f5f7ff;color:#10172a;cursor:pointer}.btn.secondary{margin-top:10px;background:rgba(255,255,255,.08);color:#e9eeff}.hidden{display:none}.foot{text-align:center;color:#73809b;font-size:12px;margin-top:18px}.error{color:#ffb4b4}
+</style>
+</head>
+<body><main class="card">
+<div class="brand">Fasmora</div><div class="icon" id="icon">↻</div>
+<h1 id="title">Checking for updates…</h1>
+<p class="sub" id="message">Reading the latest release information.</p>
+<div class="status" id="status">Connecting to update service…</div>
+<div id="details" class="hidden">
+<div class="meta"><span>Latest version<br><b id="version">—</b></span><span>Released<br><b id="date">—</b></span></div>
+<section class="news"><h2>What's new</h2><ul id="whatsNew"></ul></section>
+<a class="btn" id="download" href="#" rel="noopener">Download update</a>
+<a class="btn secondary hidden" id="altDownload" href="#" rel="noopener">32-bit ARM download</a>
+</div>
+<div class="foot">Secure update information from the official Fasmora update manifest.</div>
+</main>
+<script>
+const MANIFEST='https://raw.githubusercontent.com/Dancode-del/fasmora-updates/main/update.json';
+const q=new URLSearchParams(location.search);
+const installedCode=Number(q.get('versionCode')||q.get('code')||0);
+const installedName=q.get('version')||'';
+const $=id=>document.getElementById(id);
+function setDownload(data){
+ const d=data.downloads||{}, arm64=d['arm64-v8a'], arm32=d['armeabi-v7a'];
+ // Browsers cannot reliably expose Android ABI, so ARM64 is the recommended default.
+ if(arm64?.url){$('download').href=arm64.url;$('download').textContent=arm64.label||'Download ARM64 update'}
+ else if(arm32?.url){$('download').href=arm32.url;$('download').textContent=arm32.label||'Download update'}
+ else $('download').classList.add('hidden');
+ if(arm64?.url&&arm32?.url){$('altDownload').href=arm32.url;$('altDownload').textContent=arm32.label||'32-bit ARM download';$('altDownload').classList.remove('hidden')}
+}
+fetch(MANIFEST,{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(data=>{
+ const latest=Number(data.latestVersionCode||0);
+ $('version').textContent=data.latestVersionName||latest||'Unknown';
+ $('date').textContent=data.releaseDate||'—';
+ $('whatsNew').innerHTML='';
+ (Array.isArray(data.whatsNew)?data.whatsNew:[]).forEach(x=>{const li=document.createElement('li');li.textContent=x;$('whatsNew').appendChild(li)});
+ $('details').classList.remove('hidden');
+ if(installedCode>0&&latest>0&&installedCode>=latest){
+   $('icon').textContent='✓';$('title').textContent='You’re up to date';
+   $('message').textContent='Your installed version is the latest available version.';
+   $('status').textContent='Installed: '+(installedName||installedCode)+' • Latest: '+(data.latestVersionName||latest);
+   $('download').classList.add('hidden');$('altDownload').classList.add('hidden');
+ }else{
+   $('icon').textContent='↓';$('title').textContent=data.title||'Update available';
+   $('message').textContent=data.message||'A newer version is available to download.';
+   $('status').textContent=installedCode>0?'Installed: '+(installedName||installedCode)+' • Update available':'Latest release available • '+(data.required?'Required update':'Optional update');
+   setDownload(data);
+ }
+}).catch(()=>{
+ $('icon').textContent='!';$('title').textContent='Couldn’t check for updates';
+ $('message').textContent='The update information could not be loaded. Please check your connection and try again.';
+ $('status').textContent='Update service unavailable';$('status').classList.add('error');
+});
+</script></body></html>
