@@ -27,13 +27,40 @@ const q=new URLSearchParams(location.search);
 const installedCode=Number(q.get('versionCode')||q.get('code')||0);
 const installedName=q.get('version')||'';
 const $=id=>document.getElementById(id);
-function setDownload(data){
+async function detectAbi(){
+ // Explicit ABI from Fasmora or another trusted caller is the most reliable signal.
+ const explicit=(q.get('abi')||'').toLowerCase();
+ if(explicit==='arm64-v8a'||explicit==='armeabi-v7a') return explicit;
+ try{
+   if(navigator.userAgentData?.getHighEntropyValues){
+     const h=await navigator.userAgentData.getHighEntropyValues(['architecture','bitness']);
+     const arch=(h.architecture||'').toLowerCase(), bits=String(h.bitness||'');
+     if((arch.includes('arm')||arch.includes('aarch'))&&bits==='64') return 'arm64-v8a';
+     if(arch.includes('arm')&&bits==='32') return 'armeabi-v7a';
+   }
+ }catch(_){}
+ const ua=navigator.userAgent.toLowerCase();
+ if(/aarch64|arm64/.test(ua)) return 'arm64-v8a';
+ if(/armv7|armeabi|arm;/.test(ua)) return 'armeabi-v7a';
+ return null;
+}
+async function setDownload(data){
  const d=data.downloads||{}, arm64=d['arm64-v8a'], arm32=d['armeabi-v7a'];
- // Browsers cannot reliably expose Android ABI, so ARM64 is the recommended default.
- if(arm64?.url){$('download').href=arm64.url;$('download').textContent=arm64.label||'Download ARM64 update'}
- else if(arm32?.url){$('download').href=arm32.url;$('download').textContent=arm32.label||'Download update'}
- else $('download').classList.add('hidden');
- if(arm64?.url&&arm32?.url){$('altDownload').href=arm32.url;$('altDownload').textContent=arm32.label||'32-bit ARM download';$('altDownload').classList.remove('hidden')}
+ const abi=await detectAbi();
+ $('altDownload').classList.add('hidden');
+ if(abi==='arm64-v8a'&&arm64?.url){
+   $('download').href=arm64.url;$('download').textContent='Download ARM64 update';
+   $('status').textContent+=' • ARM64 detected';
+ }else if(abi==='armeabi-v7a'&&arm32?.url){
+   $('download').href=arm32.url;$('download').textContent='Download 32-bit ARM update';
+   $('status').textContent+=' • 32-bit ARM detected';
+ }else{
+   // Do not guess ARM64 when the browser hides CPU architecture.
+   $('download').classList.add('hidden');
+   $('status').textContent+=' • Choose your device type';
+   if(arm64?.url){$('download').classList.remove('hidden');$('download').href=arm64.url;$('download').textContent='ARM64 (64-bit)'}
+   if(arm32?.url){$('altDownload').classList.remove('hidden');$('altDownload').href=arm32.url;$('altDownload').textContent='32-bit ARM (older devices)'}
+ }
 }
 fetch(MANIFEST,{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(data=>{
  const latest=Number(data.latestVersionCode||0);
